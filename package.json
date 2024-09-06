@@ -1,0 +1,22 @@
+{
+  "name": "mateochat",
+  "version": "1.0.0",
+  "description": "Think of your favorite messaging app - Discord, Telegram, WhatsApp, Facebook Messenger, AOL Instant Messenger, etc. - and imagine what it would be like if you could build your own. This project will give you a chance to do just that. You’ll be building a web app that allows users to send messages to each other.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.7.7",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "pg": "^8.12.0",
+    "react-router-dom": "^6.26.1"
+  }
+}

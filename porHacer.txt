@@ -1,0 +1,253 @@
+6. Funcionalidad extra
+1. Envío de Imágenes (usando Cloudinary)
+Primero, necesitas configurar un servicio de almacenamiento de imágenes. Cloudinary es una opción popular.
+
+Paso 1: Registro en Cloudinary
+Crea una cuenta en Cloudinary.
+Obtén las credenciales de la API (cloud_name, api_key, api_secret).
+Paso 2: Instalar el SDK de Cloudinary
+Instala el SDK de Cloudinary en tu servidor para cargar imágenes:
+
+bash
+Copy code
+npm install cloudinary multer multer-storage-cloudinary
+Paso 3: Configuración de Cloudinary en el backend
+En el archivo server.js, agrega la configuración de Cloudinary y Multer para gestionar las cargas de archivos:
+
+js
+Copy code
+const cloudinary = require('cloudinary').v2;
+const multer = require('multer');
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
+
+// Configurar Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+// Configuración de almacenamiento de imágenes en Cloudinary
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: 'chat_images', // Carpeta donde se guardarán las imágenes
+    allowed_formats: ['jpg', 'png', 'jpeg', 'gif'],
+  },
+});
+
+const upload = multer({ storage });
+
+// Ruta para subir imágenes
+app.post('/upload-image', authenticateToken, upload.single('image'), (req, res) => {
+  res.json({ imageUrl: req.file.path }); // Enviar la URL de la imagen al cliente
+});
+Paso 4: Modificación del frontend para enviar imágenes
+En App.js, agrega un campo de subida de imágenes para permitir que los usuarios suban imágenes:
+
+jsx
+Copy code
+import React, { useState, useContext } from 'react';
+import axios from 'axios';
+import AuthContext from './AuthContext';
+
+const App = () => {
+  const { token } = useContext(AuthContext);
+  const [newMessage, setNewMessage] = useState('');
+  const [image, setImage] = useState(null);
+  const [receiverId, setReceiverId] = useState('');
+
+  const sendMessage = async () => {
+    let imageUrl = '';
+
+    if (image) {
+      const formData = new FormData();
+      formData.append('image', image);
+
+      const imageRes = await axios.post('http://localhost:3000/upload-image', formData, {
+        headers: { Authorization: token },
+      });
+
+      imageUrl = imageRes.data.imageUrl;
+    }
+
+    await axios.post(
+      'http://localhost:3000/messages',
+      {
+        receiver_id: receiverId,
+        message_content: newMessage,
+        image_url: imageUrl,
+      },
+      { headers: { Authorization: token } }
+    );
+  };
+
+  return (
+    <div>
+      {/* ...otras partes de la interfaz... */}
+      <div>
+        <input
+          type="file"
+          onChange={(e) => setImage(e.target.files[0])}
+        />
+        <button onClick={sendMessage}>Enviar mensaje</button>
+      </div>
+    </div>
+  );
+};
+
+export default App;
+2. Lista de Amigos y Usuarios en Línea (usando WebSockets)
+Para saber si los usuarios están en línea, podemos usar WebSockets con Socket.IO.
+
+Paso 1: Instalar Socket.IO
+Instala Socket.IO en el backend y frontend:
+
+bash
+Copy code
+npm install socket.io
+npm install socket.io-client
+Paso 2: Configurar Socket.IO en el backend
+Modifica tu archivo server.js para integrar Socket.IO y la lógica para saber cuándo los usuarios están conectados.
+
+js
+Copy code
+const http = require('http');
+const socketIO = require('socket.io');
+
+const server = http.createServer(app);
+const io = socketIO(server);
+
+let onlineUsers = {};
+
+io.on('connection', (socket) => {
+  socket.on('user_connected', (userId) => {
+    onlineUsers[userId] = socket.id;
+    io.emit('update_online_users', Object.keys(onlineUsers));
+  });
+
+  socket.on('disconnect', () => {
+    for (const userId in onlineUsers) {
+      if (onlineUsers[userId] === socket.id) {
+        delete onlineUsers[userId];
+        break;
+      }
+    }
+    io.emit('update_online_users', Object.keys(onlineUsers));
+  });
+});
+
+server.listen(PORT, () => {
+  console.log(`Servidor escuchando en el puerto ${PORT}`);
+});
+Paso 3: Modificar el frontend para conectar usuarios y mostrar el estado online
+Modifica el App.js para conectarse a Socket.IO y gestionar la lista de amigos en línea.
+
+jsx
+Copy code
+import React, { useState, useContext, useEffect } from 'react';
+import { io } from 'socket.io-client';
+import AuthContext from './AuthContext';
+
+const App = () => {
+  const { token } = useContext(AuthContext);
+  const [onlineUsers, setOnlineUsers] = useState([]);
+  const socket = io('http://localhost:3000');
+
+  useEffect(() => {
+    socket.emit('user_connected', user.id);
+
+    socket.on('update_online_users', (users) => {
+      setOnlineUsers(users);
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [socket, user.id]);
+
+  return (
+    <div>
+      {/* ... */}
+      <div>
+        <h2>Usuarios en línea</h2>
+        <ul>
+          {onlineUsers.map((userId) => (
+            <li key={userId}>{userId}</li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+};
+
+export default App;
+3. Grupos de chat
+Vamos a crear una tabla Groups en la base de datos, para gestionar los grupos de chat.
+
+Paso 1: Crear tabla en PostgreSQL
+Añade una nueva tabla Groups en la base de datos.
+
+sql
+Copy code
+CREATE TABLE groups (
+  id SERIAL PRIMARY KEY,
+  group_name VARCHAR(255) NOT NULL
+);
+
+CREATE TABLE group_members (
+  group_id INT REFERENCES groups(id),
+  user_id INT REFERENCES users(id),
+  PRIMARY KEY (group_id, user_id)
+);
+
+CREATE TABLE group_messages (
+  id SERIAL PRIMARY KEY,
+  group_id INT REFERENCES groups(id),
+  sender_id INT REFERENCES users(id),
+  message_content TEXT,
+  image_url TEXT,
+  timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+Paso 2: Rutas para manejar los grupos
+Agrega las rutas en server.js para crear grupos, agregar usuarios y enviar mensajes grupales.
+
+js
+Copy code
+// POST /groups - Crear un nuevo grupo
+app.post('/groups', authenticateToken, async (req, res) => {
+  const { group_name } = req.body;
+
+  try {
+    const result = await pool.query(
+      'INSERT INTO groups (group_name) VALUES ($1) RETURNING id, group_name',
+      [group_name]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: 'Error al crear el grupo' });
+  }
+});
+
+// POST /groups/:groupId/messages - Enviar mensaje a un grupo
+app.post('/groups/:groupId/messages', authenticateToken, async (req, res) => {
+  const { message_content, image_url } = req.body;
+  const { groupId } = req.params;
+  const sender_id = req.user.id;
+
+  try {
+    await pool.query(
+      'INSERT INTO group_messages (group_id, sender_id, message_content, image_url) VALUES ($1, $2, $3, $4)',
+      [groupId, sender_id, message_content, image_url]
+    );
+    res.status(201).json({ message: 'Mensaje enviado al grupo' });
+  } catch (error) {
+    res.status(500).json({ error: 'Error al enviar mensaje al grupo' });
+  }
+});
+Conclusión
+Ahora tu aplicación permite a los usuarios:
+
+Enviar imágenes usando Cloudinary.
+Ver la lista de amigos en línea usando WebSockets.
+Crear y enviar mensajes en grupos de chat.
